@@ -82,7 +82,13 @@ async function main() {
     });
   }
 
-  // Desactiva el antiguo registro demo si existe, para que no aparezca como dato real.
+  // Retira del ranking el producto demo legado para que no compita contra observaciones reales.
+  await prisma.product.updateMany({
+    where: { slug: { in: ["power-bank-qi2-10000"] } },
+    data: { active: false, electroScore: 0 }
+  });
+
+  // Mantiene cualquier proveedor demo legado claramente marcado como no confiable.
   await prisma.supplier.updateMany({
     where: { id: "seed-supplier-tijuana" },
     data: {

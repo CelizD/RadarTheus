@@ -114,21 +114,22 @@ model TrendSnapshot {
 }
 
 model Supplier {
-  id        String        @id @default(cuid())
-  name      String
-  city      String?
-  state     String?
-  scope     SupplierScope @default(NATIONAL)
-  website   String?
-  whatsapp  String?
-  telegram  String?
-  address   String?
-  verified  Boolean       @default(false)
-  rating    Decimal?      @db.Decimal(3, 2)
-  notes     String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  offers    SupplierOffer[]
+  id         String        @id @default(cuid())
+  name       String
+  city       String?
+  state      String?
+  scope      SupplierScope @default(NATIONAL)
+  categories String[]      @default([])
+  website    String?
+  whatsapp   String?
+  telegram   String?
+  address    String?
+  verified   Boolean       @default(false)
+  rating     Decimal?      @db.Decimal(3, 2)
+  notes      String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  offers     SupplierOffer[]
 
   @@index([state, city])
 }

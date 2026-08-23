@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, Context, InlineKeyboard } from "grammy";
 import { config } from "./config.js";
 import { formatProduct } from "./lib/format.js";
 import { createProInvoiceLink } from "./services/invoices.js";
@@ -11,6 +11,21 @@ import {
 import { getUserByTelegramId, upsertTelegramUser } from "./services/users.js";
 
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
+
+function getTelegramUserId(ctx: Context): number | null {
+  return ctx.from?.id ?? null;
+}
+
+async function requireTelegramUserId(ctx: Context): Promise<number | null> {
+  const telegramId = getTelegramUserId(ctx);
+  if (telegramId !== null) return telegramId;
+
+  if (ctx.chat) {
+    await ctx.reply("No pude identificar tu usuario de Telegram. Intenta abrir el bot en un chat privado.");
+  }
+
+  return null;
+}
 
 bot.use(async (ctx, next) => {
   if (ctx.from) await upsertTelegramUser(ctx.from);
@@ -46,7 +61,10 @@ bot.command("start", async (ctx) => {
 });
 
 bot.command("hoy", async (ctx) => {
-  const isPro = await hasProAccess(ctx.from.id);
+  const telegramId = await requireTelegramUserId(ctx);
+  if (telegramId === null) return;
+
+  const isPro = await hasProAccess(telegramId);
   const products = await getTopProducts(isPro ? 10 : 3);
 
   if (!products.length) {
@@ -61,18 +79,24 @@ bot.command("hoy", async (ctx) => {
 });
 
 bot.command("tendencias", async (ctx) => {
-  const products = await getTopProducts((await hasProAccess(ctx.from.id)) ? 10 : 3);
+  const telegramId = await requireTelegramUserId(ctx);
+  if (telegramId === null) return;
+
+  const products = await getTopProducts((await hasProAccess(telegramId)) ? 10 : 3);
   await ctx.reply(products.map((product, index) => formatProduct(product, index + 1)).join("\n\n") || "No hay tendencias todavía.");
 });
 
 bot.command("buscar", async (ctx) => {
+  const telegramId = await requireTelegramUserId(ctx);
+  if (telegramId === null) return;
+
   const query = ctx.match?.trim();
   if (!query) {
     await ctx.reply("Uso: /buscar power bank");
     return;
   }
 
-  const results = await searchProducts(query, (await hasProAccess(ctx.from.id)) ? 10 : 3);
+  const results = await searchProducts(query, (await hasProAccess(telegramId)) ? 10 : 3);
   if (!results.length) {
     await ctx.reply(`No encontré productos para: ${query}`);
     return;
@@ -82,7 +106,10 @@ bot.command("buscar", async (ctx) => {
 });
 
 bot.command("proveedores", async (ctx) => {
-  if (!(await hasProAccess(ctx.from.id))) {
+  const telegramId = await requireTelegramUserId(ctx);
+  if (telegramId === null) return;
+
+  if (!(await hasProAccess(telegramId))) {
     await ctx.reply("🔒 La búsqueda completa de proveedores es una función PRO.\nUsa /pro para desbloquearla.");
     return;
   }
@@ -124,13 +151,16 @@ bot.command("proveedores", async (ctx) => {
 });
 
 bot.command("pro", async (ctx) => {
-  if (await hasProAccess(ctx.from.id)) {
+  const telegramId = await requireTelegramUserId(ctx);
+  if (telegramId === null) return;
+
+  if (await hasProAccess(telegramId)) {
     await ctx.reply("👑 Ya tienes RadarTheus PRO activo.");
     return;
   }
 
   try {
-    const invoiceUrl = await createProInvoiceLink(ctx.from.id);
+    const invoiceUrl = await createProInvoiceLink(telegramId);
     const keyboard = new InlineKeyboard().url(`⭐ Suscribirme por ${config.PRO_PRICE_STARS} Stars`, invoiceUrl);
     await ctx.reply([
       "👑 RADARTHEUS PRO",
@@ -150,8 +180,11 @@ bot.command("pro", async (ctx) => {
 });
 
 bot.command("mi_plan", async (ctx) => {
-  const user = await getUserByTelegramId(ctx.from.id);
-  const pro = await hasProAccess(ctx.from.id);
+  const telegramId = await requireTelegramUserId(ctx);
+  if (telegramId === null) return;
+
+  const user = await getUserByTelegramId(telegramId);
+  const pro = await hasProAccess(telegramId);
   await ctx.reply([
     "👤 MI CUENTA",
     "",
@@ -162,7 +195,10 @@ bot.command("mi_plan", async (ctx) => {
 });
 
 bot.command("invertir", async (ctx) => {
-  if (!(await hasProAccess(ctx.from.id))) {
+  const telegramId = await requireTelegramUserId(ctx);
+  if (telegramId === null) return;
+
+  if (!(await hasProAccess(telegramId))) {
     await ctx.reply("🔒 /invertir es una función PRO. Usa /pro.");
     return;
   }
@@ -194,17 +230,23 @@ bot.command("invertir", async (ctx) => {
 
 bot.callbackQuery("trends", async (ctx) => {
   await ctx.answerCallbackQuery();
-  const products = await getTopProducts((await hasProAccess(ctx.from.id)) ? 10 : 3);
+  const telegramId = await requireTelegramUserId(ctx);
+  if (telegramId === null) return;
+
+  const products = await getTopProducts((await hasProAccess(telegramId)) ? 10 : 3);
   await ctx.reply(products.map((product, index) => formatProduct(product, index + 1)).join("\n\n"));
 });
 
 bot.callbackQuery("pro", async (ctx) => {
   await ctx.answerCallbackQuery();
-  if (await hasProAccess(ctx.from.id)) {
+  const telegramId = await requireTelegramUserId(ctx);
+  if (telegramId === null) return;
+
+  if (await hasProAccess(telegramId)) {
     await ctx.reply("👑 Ya eres PRO.");
     return;
   }
-  const invoiceUrl = await createProInvoiceLink(ctx.from.id);
+  const invoiceUrl = await createProInvoiceLink(telegramId);
   const keyboard = new InlineKeyboard().url("⭐ Activar PRO", invoiceUrl);
   await ctx.reply("Desbloquea todas las oportunidades y proveedores.", { reply_markup: keyboard });
 });
@@ -224,11 +266,14 @@ bot.on("pre_checkout_query", async (ctx) => {
 });
 
 bot.on("message:successful_payment", async (ctx) => {
+  const telegramId = await requireTelegramUserId(ctx);
+  if (telegramId === null) return;
+
   const payment = ctx.message.successful_payment;
   if (payment.currency !== "XTR") return;
 
   const expiresAt = await activateProFromPayment({
-    telegramId: ctx.from.id,
+    telegramId,
     starsAmount: payment.total_amount,
     telegramPaymentChargeId: payment.telegram_payment_charge_id,
     providerPaymentChargeId: payment.provider_payment_charge_id

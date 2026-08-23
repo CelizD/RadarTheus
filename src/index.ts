@@ -11,11 +11,18 @@ app.get("/", (_req, res) => {
   res.json({ name: "RadarTheus", status: "ok", version: "0.1.0" });
 });
 
-app.get("/health", async (_req, res) => {
+// Liveness: Railway solo necesita saber que el proceso HTTP está vivo.
+app.get("/health", (_req, res) => {
+  res.status(200).json({ ok: true, service: "RadarTheus" });
+});
+
+// Readiness: aquí sí comprobamos la conexión con Supabase/PostgreSQL.
+app.get("/ready", async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
     res.status(200).json({ ok: true, database: "ok" });
-  } catch {
+  } catch (error) {
+    console.error("Database readiness check failed:", error);
     res.status(503).json({ ok: false, database: "error" });
   }
 });
@@ -53,13 +60,12 @@ async function configureTelegram() {
   console.log(`Webhook configurado: ${url}`);
 }
 
-const server = app.listen(config.PORT, () => {
-  console.log(`RadarTheus escuchando en puerto ${config.PORT}`);
+const server = app.listen(config.PORT, "0.0.0.0", () => {
+  console.log(`RadarTheus escuchando en 0.0.0.0:${config.PORT}`);
 });
 
 configureTelegram().catch((error) => {
   console.error("No se pudo iniciar/configurar Telegram:", error);
-  process.exitCode = 1;
 });
 
 async function shutdown(signal: string) {

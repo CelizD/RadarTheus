@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  EXPIRED
+}
+
+enum TrendDirection {
+  RISING
+  STABLE
+  FALLING
+}
+
+enum SupplierScope {
+  LOCAL
+  STATE
+  NATIONAL
+  IMPORT
+}
+
+model User {
+  id            String         @id @default(cuid())
+  telegramId    BigInt         @unique
+  username      String?
+  firstName     String?
+  lastName      String?
+  city          String?
+  state         String?
+  plan          Plan           @default(FREE)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  subscriptions Subscription[]
+  watchlist     Watchlist[]
+}
+
+model Subscription {
+  id                      String             @id @default(cuid())
+  userId                  String
+  user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status                  SubscriptionStatus @default(ACTIVE)
+  starsAmount             Int
+  telegramPaymentChargeId String             @unique
+  providerPaymentChargeId String?
+  startsAt                DateTime           @default(now())
+  expiresAt               DateTime
+  autoRenew               Boolean            @default(true)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  @@index([userId, status])
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  slug     String    @unique
+  name     String
+  products Product[]
+}
+
+model Product {
+  id             String          @id @default(cuid())
+  slug           String          @unique
+  name           String
+  brand          String?
+  categoryId     String
+  category       Category        @relation(fields: [categoryId], references: [id])
+  description    String?
+  electroScore   Int             @default(0)
+  trendDirection TrendDirection  @default(STABLE)
+  wholesaleMin   Decimal?        @db.Decimal(10, 2)
+  wholesaleMax   Decimal?        @db.Decimal(10, 2)
+  resaleMin      Decimal?        @db.Decimal(10, 2)
+  resaleMax      Decimal?        @db.Decimal(10, 2)
+  riskScore      Int             @default(50)
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  trendSnapshots TrendSnapshot[]
+  offers         SupplierOffer[]
+  watchlistedBy  Watchlist[]
+
+  @@index([electroScore])
+  @@index([categoryId])
+}
+
+model TrendSnapshot {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  score       Int
+  demandScore Int
+  growthScore Int
+  marginScore Int
+  supplyScore Int
+  competition Int
+  source      String
+  observedAt  DateTime @default(now())
+
+  @@index([productId, observedAt])
+}
+
+model Supplier {
+  id        String        @id @default(cuid())
+  name      String
+  city      String?
+  state     String?
+  scope     SupplierScope @default(NATIONAL)
+  website   String?
+  whatsapp  String?
+  telegram  String?
+  address   String?
+  verified  Boolean       @default(false)
+  rating    Decimal?      @db.Decimal(3, 2)
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  offers    SupplierOffer[]
+
+  @@index([state, city])
+}
+
+model SupplierOffer {
+  id          String   @id @default(cuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  price       Decimal? @db.Decimal(10, 2)
+  minimumQty  Int?
+  shippingMx  Boolean  @default(false)
+  sourceUrl   String?
+  lastChecked DateTime @default(now())
+  active      Boolean  @default(true)
+
+  @@unique([supplierId, productId])
+  @@index([productId, price])
+}
+
+model Watchlist {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minScore  Int      @default(80)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}

@@ -1,6 +1,9 @@
-import type { Category, Product } from "@prisma/client";
+import type { Category, Product, TrendSnapshot } from "@prisma/client";
 
-type ProductWithCategory = Product & { category: Category };
+type ProductWithCategory = Product & {
+  category: Category;
+  trendSnapshots?: TrendSnapshot[];
+};
 
 function money(value: unknown) {
   if (value == null) return "N/D";
@@ -12,6 +15,18 @@ function money(value: unknown) {
   }).format(Number(value));
 }
 
+function observedDate(product: ProductWithCategory) {
+  const observedAt = product.trendSnapshots?.[0]?.observedAt;
+  if (!observedAt) return null;
+
+  return new Intl.DateTimeFormat("es-MX", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "America/Mexico_City"
+  }).format(observedAt);
+}
+
 export function trendEmoji(score: number) {
   if (score >= 90) return "🔥";
   if (score >= 80) return "📈";
@@ -21,12 +36,17 @@ export function trendEmoji(score: number) {
 
 export function formatProduct(product: ProductWithCategory, index?: number) {
   const prefix = index ? `${index}. ` : "";
+  const observed = observedDate(product);
 
   return [
     `${prefix}${trendEmoji(product.electroScore)} ${product.name}`,
     `   ElectroScore: ${product.electroScore}/100`,
     `   Categoría: ${product.category.name}`,
-    `   Mayoreo: ${money(product.wholesaleMin)} – ${money(product.wholesaleMax)}`,
-    `   Reventa: ${money(product.resaleMin)} – ${money(product.resaleMax)}`
-  ].join("\n");
+    `   Mayoreo verificado: ${money(product.wholesaleMin)} – ${money(product.wholesaleMax)}`,
+    `   Mercado observado: ${money(product.resaleMin)} – ${money(product.resaleMax)}`,
+    observed ? `   🕒 Observado: ${observed}` : null,
+    product.trendDirection === "STABLE"
+      ? "   ↔️ Tendencia: neutral hasta acumular historial"
+      : `   Tendencia: ${product.trendDirection}`
+  ].filter(Boolean).join("\n");
 }
